@@ -16,11 +16,12 @@ extern int   date_formats;
 typedef struct csvT {
 	char	*filename;
 	FILE	*fp;
-	off_t	size;
+	unsigned long	size;
 	unsigned int est_row_size;
 	unsigned long est_rows;
 	unsigned int bytes_per_bitmap_bit;
-	unsigned char	*bitmap;
+	unsigned char	*bitmap_loaded;
+	unsigned char	*bitmap_display;	// Unused for now.
 	unsigned long	bitmap_size;
 } csvT;
 
@@ -51,10 +52,12 @@ extern int		types;
 
 typedef struct histogramT
 {
-	int		bins;
-	double	*breaks;
+	int				bins;
+	double			*breaks;
 	unsigned long	*counts;
+	double			*cdf;
 	unsigned long	max_count;
+	char			even_spaced;
 } histogramT;
 
 typedef struct statsT
@@ -67,17 +70,21 @@ typedef struct statsT
 	double		quartile[3];
 	histogramT	histogram;
 	unsigned long	cardinality;
+
+	unsigned long	*sorted_row_numbers;
+	unsigned long	sorted_rows;		// may be less than frame->rows, as we only include the finite values
+	unsigned long	allocated_rows;
 } statsT;
 
 typedef struct transformT
 {
 	char			*name;
+	char			key;
 	void			(*apply)(struct transformT *, double *, statsT *);
 	char			is_monotonic;
 	void			*param;
 	size_t			param_sz;
 	double			*data_out;
-	unsigned long	rows;			
 	statsT			stats_out;
 	struct transformT	*next;
 	struct transformT	*prev;
@@ -104,25 +111,44 @@ typedef struct frameT
 	unsigned long	allocated_rows;
 	columnT			**column;
 	int				columns;
+
+	unsigned long	allocated_region_rows; // only for debugging TODO - remove this
+	unsigned char	*region_rows;		// for storing whether a row has been found to be in a region
+	double			*nn_distance;		// for nearest neighbor gradients
 } frameT;
 
 int is_date (char *buf);
 frameT	*read_csv (char *filename);
 
+void	nlo_init (void);
+
 frameT	*new_frame (char *name, int columns);
 void	free_frame (frameT *f);
 void    print_frame (frameT *frame);
+int		export_frame (frameT *frame, char *name);
 void	init_column (frameT *f, int i, char *name, dtype t);
 void	column_init_data (frameT *f, int i, unsigned long rows);
 void    column_realloc_data (frameT *f, int i, unsigned long rows);
 void	column_add_data (frameT *f, int i, char *str);
 void 	column_add_transform (columnT *c, transformT *t);
-void	column_apply_transforms (columnT *c);
-void    update_stats (statsT *s, double *data, unsigned long rows);
+void 	column_pop_transform (frameT *f, int col);
+void    column_apply_transforms (frameT *f, int col);
+void    column_wipe_transforms (frameT *f, int i);
+void    update_column_stats (frameT *f, int i);
 void    show_stats (statsT *s);
+void    load_random_rows (frameT *frame, float pct);
+
+statsT  *get_stats (columnT *c);
+double	*get_data (columnT *c);
+void    get_transform_data (transformT *t, double **data, statsT **stats);
+
+void	mark_region (frameT *frame, int i, int j, double min_i, double max_i, double min_j, double max_j);
+void    nearest_neighbor (frameT *frame, int i, int j, double x, double y);
 
 void	init_transforms (void);
 transformT 	*clone_transform (transformT *t);
+
+
 
 void	init_types (void);
 

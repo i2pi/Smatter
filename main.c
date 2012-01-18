@@ -1,15 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "gui.h"
 #include "data.h"
+#include "config.h"
 
 int main (int argc, char **argv)
 {
 	frameT	*frame;
-	transformT	*t;
-
-	init_types();
-	init_transforms();
 
 	if (argc != 2)
 	{
@@ -17,17 +15,19 @@ int main (int argc, char **argv)
 		exit (-1);
 	}
 
+	nlo_init();
+	init_types();
+	init_transforms();
+	init_config();
+
 	frame = read_csv (argv[1]);
 
-	/*
-	t = clone_transform (&transform[2]);
-	column_add_transform (frame->column[4], t);
-	column_apply_transforms (frame->column[4]);
-	*/
+	init_gui(&argc, argv, 640, 480, frame);
 
-//	print_frame (frame);
+	// TODO: yeah, need to do this properly
+	if (load_config ("smatter.conf") == -1) load_config("~/.smatter.conf");
 
-	show_stats (&frame->column[3]->orig_stats);
+	glutMainLoop();
 
 	return (0);
 }

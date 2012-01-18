@@ -1,0 +1,39 @@
+smatter / i2pi.com
+(c) Joshua Reich 2008
+
+ABOUT
+
+Smatter is a small visual exploratory data analysis (VEDA)  tool. It's primary
+mode of visualization is the scatter-plot matrix. A scatter plot matrix, or 
+scatter matrix is a N x N display of scatter plots, where N is the number of 
+variables being examined. In each cell (i,j) of the matrix, the plot displays 
+a chart of of i versus j. In the main diagonal the name of each variable is 
+shown.
+
+Smatter is designed to allow very quick inspection of possibly very large data
+sets. While development is not yet complete, the goal is to support files much
+larger than available RAM in the machine. In VEDA it is essential to take a 
+new data set and quickly get a sense of what is going on. As such, the primary
+motivation for designing to tool is to remove all barriers from exploring new
+and large data sets. We try to acheive this with an uncluttered display and
+navigating the system primarily though keyboard short-cuts.
+
+THANKS
+
+The CSV parsing routines come from libmba-0.9.1 - Thanks Michael B Allen!
+	http://www.ioplex.com/~miallen/libmba/
+
+USAGE
+
+Smatter reads data from well formed CSV files and is invoked from the command
+line simply as:
+
+	smatter path/to/data.csv
+
+From here we enter a land of keyboard shortcuts.
+
+NAVIGATION
+
+TRANSFORMS
+
+

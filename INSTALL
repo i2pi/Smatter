@@ -1,0 +1,9 @@
+Shouldn't be too hard.
+
+Just follow the instructions in the make file to specify your platform and then run make.
+
+I don't have access to many workstations or different linux configurations. If you run in to troubles, please let me know.
+
+I'd be especially appreciative if someone could take a stab at making an autoconf script.
+
+josh@i2pi.com

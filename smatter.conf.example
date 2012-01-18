@@ -1,0 +1,17 @@
+# This is a sample config file
+# 
+# To use it, either copy it to ~/.smatter or smatter.conf in the current working directory
+
+# colors are in RRGGBBAA where AA is alpha, and alpha of 0 means clear, FF for opaque
+point = 2222ffAA
+bg = CCCC66FF
+fg = 303030FF
+axis = DD2200FF
+faint = DD220033
+fit = FF0000FF
+marked = FF000099
+scrim = CC99CC99
+
+# The default maximum number of points to display per plot
+# this is tweakable in the program with the + / - keys
+# max_display_points = 100000

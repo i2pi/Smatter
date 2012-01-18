@@ -1,0 +1,13 @@
+- SERIOUS MEMORY BUG OF UNKNOWN ORIGIN. Turn to valgrind
+
+- shouldnt be able to load more points than in file
+- Brushing in zoom mode
+- Pan/Zoom for files with many columns
+- Better handling of N/A's and inf - show them in stats window
+- Fit (one for each marked region)
+- Reference distribution 
+- Approximate pixel alpha from histograms - should blog my algo for this
+- Axis labels - need a better font solution
+- Better use of GL - minimize redraws
+- Save / Load of frames, not only CSV
+- Roll out _large_ dataset support

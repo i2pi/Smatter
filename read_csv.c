@@ -4,13 +4,13 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <math.h>
+#include <string.h>
 
 #define __USE_XOPEN
 #include <time.h>
 
+#include "mba_csv.h"
 
-#include <mba/csv.h>
-#include <mba/bitset.h>
 #include "data.h"
 
 #define CSV_BUF_SIZE	16384
@@ -19,6 +19,23 @@
 // TODO: Check for times following the date
 char	*date_format[] = {"%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"};
 int		date_formats = 2;
+
+unsigned char	nlo[256];	// lookup take for number of leaading ones
+
+void	nlo_init (void)
+{
+	int				i;
+	unsigned char	x;
+	unsigned char	mask;
+
+	for (i=0; i<256; i++)
+	{
+		x = i;
+		mask = 1 << 7;
+		nlo[i] = 0;
+		while (mask && (x & mask)) { mask >>= 1; nlo[i]++; }
+	}
+}
 
 int is_date (char *buf)
 {
@@ -164,13 +181,15 @@ csvT	*open_csv (char *file_name)
 	}
 	csv->bitmap_size = ceil (csv->size / (csv->bytes_per_bitmap_bit * 8.0));
 
-	csv->bitmap = (unsigned char *) malloc (csv->bitmap_size);
-	if (!csv->bitmap)
+	csv->bitmap_display = (unsigned char *) malloc (csv->bitmap_size);
+	csv->bitmap_loaded = (unsigned char *) malloc (csv->bitmap_size);
+	if (!csv->bitmap_loaded || !csv->bitmap_display)
 	{
 		fprintf (stderr, "Failed to alloc bitmap\n");
 		exit (-1);
 	}
-	memset (csv->bitmap, 0, csv->bitmap_size);
+	memset (csv->bitmap_display, 0, csv->bitmap_size);
+	memset (csv->bitmap_loaded, 0, csv->bitmap_size);
 
 	return (csv);	
 }
@@ -205,8 +224,29 @@ void load_row (frameT *frame)
 	if (frame->rows >= frame->allocated_rows * 0.8)
 	{
 		unsigned long new_alloc = frame->rows * 1.5;
+
 		for (i=0; i<cols; i++) column_realloc_data (frame, i, new_alloc);
+
+		free (frame->region_rows);
+		frame->region_rows = calloc (new_alloc, sizeof(unsigned char));
+		if (!frame->region_rows)
+		{
+			fprintf (stderr, "Failed to realloc region_rows\n");
+			exit (-1);
+		}
+		frame->allocated_region_rows = new_alloc;
+
 		frame->allocated_rows = new_alloc;
+	}
+
+	// We don't over-allocate transform data, so we must force reallocs whenever
+	// we load new data.	
+	for (i=0; i<cols; i++) column_wipe_transforms (frame, i);
+
+	if (frame->nn_distance)
+	{
+		free (frame->nn_distance);
+		frame->nn_distance = NULL;
 	}
 }
 
@@ -257,10 +297,13 @@ void	update_all_stats (frameT *frame)
 {
 	int	i;
 	for (i=0; i<frame->columns; i++)
-		update_stats (&frame->column[i]->orig_stats, frame->column[i]->orig_data, frame->rows);
+	{
+		frame->column[i]->orig_stats.histogram.bins = 0;	// Force recalc of histogram
+		update_column_stats (frame, i);
+	}
 }
 
-void	load_random_rows (frameT *frame, float pct)
+void load_random_rows (frameT *frame, float pct)
 {
 	// This finds a series of empty bits in the bitmap and loads the
 	// rows that correspond to the bytes in the full csv file. As rows
@@ -273,7 +316,6 @@ void	load_random_rows (frameT *frame, float pct)
 
 	rows_to_load = csv->est_rows * pct / 100.0;
 	if (!rows_to_load)  rows_to_load = 1;
-	printf ("Loading %6.4f rows [%ld]\n", pct, rows_to_load);
 
 	for (i=0; i<rows_to_load; i++)
 	{
@@ -283,19 +325,20 @@ void	load_random_rows (frameT *frame, float pct)
 
 		bitmap_byte = (random() / (float) RAND_MAX) * csv->bitmap_size;
 		st = bitmap_byte;
-		while ((bitmap_byte < csv->bitmap_size) && (csv->bitmap[bitmap_byte] == 0xFF)) bitmap_byte++;
+		while ((bitmap_byte < csv->bitmap_size) && (csv->bitmap_loaded[bitmap_byte] == 0xFF)) bitmap_byte++;
+		// TODO: this is probably why we can load more rows than exist.. bitmap may be bigger than file or something
 		if (bitmap_byte >= csv->bitmap_size)
 		{
 			bitmap_byte = 0;
-			while ((bitmap_byte < st) && (csv->bitmap[bitmap_byte] == 0xFF)) bitmap_byte++;
+			while ((bitmap_byte < st) && (csv->bitmap_loaded[bitmap_byte] == 0xFF)) bitmap_byte++;
 			if (bitmap_byte >= st)
 			{
 				// We have already loaded the entire file
 				update_all_stats (frame);
-				return;
+				return ;
 			}
 		}
-		bitmap_bit = bitset_find_first (&csv->bitmap[bitmap_byte], &csv->bitmap[bitmap_byte+1], 0);
+		bitmap_bit = nlo[csv->bitmap_loaded[bitmap_byte]];
 		
 		start = (bitmap_byte*8 + bitmap_bit) * csv->bytes_per_bitmap_bit;
 		end   = (bitmap_byte*8 + bitmap_bit + 1) * csv->bytes_per_bitmap_bit;
@@ -304,11 +347,12 @@ void	load_random_rows (frameT *frame, float pct)
 			load_offset_row (frame, start, end);
 			start = ftell (frame->csv->fp);
 		}
-		bitset_set (&csv->bitmap[bitmap_byte], bitmap_bit);
+		csv->bitmap_loaded[bitmap_byte] |= 1 << bitmap_bit;
 	}	
 
 	update_all_stats (frame);
 
+	return; 
 }
 
 void	load_all_rows (frameT *frame)
@@ -366,10 +410,16 @@ frameT *read_csv (char *file_name)
 	frame->csv = csv;
 	for (i=0; i<ncol; i++) init_column (frame, i, (char *)header[i], guess_type((char *) row[i]));
 
-
-	printf ("Estimated Rows = %ld\n", csv->est_rows);
 	for (i=0; i<ncol; i++) column_init_data (frame, i, csv->est_rows);
 	frame->allocated_rows = csv->est_rows;
+		
+	frame->region_rows = (unsigned char *) malloc (frame->allocated_rows);
+	if (!frame->region_rows)
+	{
+		fprintf (stderr, "Failed to allocate region_rows\n");	
+		exit (-1);
+	}
+	frame->allocated_region_rows = frame->allocated_rows;
 
 	if (csv->est_rows < 10000)
 	{
